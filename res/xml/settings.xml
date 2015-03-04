@@ -22,4 +22,18 @@
             android:title="Log URL"
             android:defaultValue="https://linux.ucla.edu/api/coffee.log" />
     </PreferenceCategory>
+    <PreferenceCategory
+        android:title="WiFi Settings"
+        android:key="wifi">
+        <EditTextPreference
+            android:key="csd_user"
+            android:summary="CSD Account Username for WiFi Login"
+            android:title="CSD Username"
+            android:defaultValue="" />
+        <EditTextPreference
+            android:key="csd_pass"
+            android:summary="CSD Account Password for WiFi Login"
+            android:title="CSD Password"
+            android:defaultValue="" />
+    </PreferenceCategory>
 </PreferenceScreen>

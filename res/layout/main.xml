@@ -108,4 +108,14 @@
         android:layout_width="fill_parent"
         android:layout_height="wrap_content" />
 
+    <!-- Convenient CSD login button
+         
+         The onLoginCsd method is run when the button is clicked -->
+    <Button
+        android:id="@+id/csd_wifi"
+        android:text="Log Into WiFi (CSD)"
+        android:onClick="onCsdWifi"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content" />
+
 </LinearLayout>

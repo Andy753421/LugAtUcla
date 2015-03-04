@@ -2,6 +2,8 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/refresh"
         android:title="Refresh" />
+    <item android:id="@+id/csd_wifi"
+        android:title="WiFI (CSD)" />
     <item android:id="@+id/settings"
         android:title="Settings" />
 </menu>

@@ -259,6 +259,30 @@ public class LugAtUcla extends Activity
         }.execute(location);
     }
 
+    /* Log Into WiFi */
+    public void wifiLogin(String ssid)
+    {
+    	String lower = ssid.toLowerCase();
+    	String upper = ssid.toUpperCase();
+    	String quote = "\""+upper+"\"";
+
+        // Lookup login info in the user preferences, no default
+        String user = this.settings.getString(lower+"_user", "");
+        String pass = this.settings.getString(lower+"_pass", "");
+
+        // Make sure it's valid
+        if ((user == null || user.length() == 0) ||
+            (pass == null || pass.length() == 0)) {
+                Toast.makeText(this, "No Login Info for "+quote+" WiFi",
+                		Toast.LENGTH_SHORT).show();
+                return;
+	}
+
+	// Log into wifi
+	Toast.makeText(this, "Logging into "+quote+" WiFi",
+			Toast.LENGTH_SHORT).show();
+    }
+
     /* Callbacks - there are multiple ways to specify callback but one of the
      *             easiest ones is to add the onClick attribute to
      *             res/layout/main.xml with a function to call when the user
@@ -270,6 +294,10 @@ public class LugAtUcla extends Activity
     {
         this.loadCoffeeStatus();
         this.loadWebcamStatus();
+    }
+    public void onCsdWifi(View btn)
+    {
+        this.wifiLogin("csd");
     }
 
     /* Initialize the App menu
@@ -294,6 +322,11 @@ public class LugAtUcla extends Activity
             case R.id.refresh:
                 this.loadCoffeeStatus();
                 this.loadWebcamStatus();
+                return true;
+
+            // log into CSD wifi
+            case R.id.csd_wifi:
+                this.wifiLogin("csd");
                 return true;
 
             // open the user settings list
