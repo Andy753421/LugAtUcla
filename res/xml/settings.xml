@@ -1,5 +1,14 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
     <PreferenceCategory
+        android:title="WebCam Settings"
+        android:key="webcam">
+        <EditTextPreference
+            android:key="lastsnap_jpg"
+            android:summary="Last WebCam Snapshot Status URL"
+            android:title="WebCam URL"
+            android:defaultValue="https://linux.ucla.edu/snapshots/lastsnap.jpg" />
+    </PreferenceCategory>
+    <PreferenceCategory
         android:title="Coffee Pot Settings"
         android:key="coffee">
         <EditTextPreference

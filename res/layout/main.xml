@@ -12,7 +12,29 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent">
 
-    <!-- This is the to part of our UI
+    <!-- This is the top part of our UI
+
+         Show the current webcam image -->
+    <ImageView
+        android:id="@+id/lastsnap"
+        android:layout_width="fill_parent"
+	android:layout_height="wrap_content"
+	android:src="@android:drawable/star_off" />
+
+    <!-- Android doesn't provide a good way to make separators, supposedly we
+         can use the built-in "divider_horizontal" images, but they don't seem
+         to work. Setting the background color, width, height, and padding lets
+         us draw a divider manually. -->
+    <ImageView
+        android:paddingTop="10px"
+        android:paddingBottom="10px"
+        android:layout_height="1dp"
+        android:layout_width="fill_parent"
+        android:layout_gravity="center_horizontal"
+        android:background="@android:color/darker_gray"
+        android:src="@android:drawable/divider_horizontal_dark" />
+
+    <!-- Show the coffee status
 
          We use a table layout here so that all the icons line up nicely. This
          could probably be created in the UI editor, but you can just search
@@ -57,10 +79,7 @@
         </TableRow>
     </TableLayout>
 
-    <!-- Android doesn't provide a good way to make separators, supposedly we
-         can use the built-in "divider_horizontal" images, but they don't seem
-         to work. Setting the background color, width, height, and padding lets
-         us draw a divider manually. -->
+    <!-- Next Separator -->
     <ImageView
         android:paddingTop="10px"
         android:paddingBottom="10px"

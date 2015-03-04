@@ -3,6 +3,8 @@ package edu.ucla.linux.tutorial;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -27,6 +29,8 @@ import java.net.URL;
 import java.text.DateFormat;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -40,22 +44,29 @@ import org.json.JSONObject;
 public class LugAtUcla extends Activity
 {
     /* URL Constants - only used if the preferences file is invalid */
-    private final String COFFEE_JSON = "https://linux.ucla.edu/api/coffee.json";
-    private final String COFFEE_LOG  = "https://linux.ucla.edu/api/coffee.log";
+    private final String LASTSNAP_JPG = "https://linux.ucla.edu/snapshots/lastsnap.jpg";
+
+    private final String COFFEE_JSON  = "https://linux.ucla.edu/api/coffee.json";
+    private final String COFFEE_LOG   = "https://linux.ucla.edu/api/coffee.log";
 
     /* Settings - this provides access to the actual settings data,
      *            the settings activity is in the Settings.java class
      *            and provides the user interface for editing the settings. */
     private SharedPreferences settings;
 
+    /* Auto refresh */
+    private Timer     timer;       // Java auto-refresh timer
+
     /* Activity Widgets */
-    private TextView  statusView;  // Text view for dumping ASCII status
-                                   // This also shows error messages
+    private ImageView lastsnap;    // Last webcam snapshot
 
     private ImageView potIn;       // Star icon for pos status
     private TextView  potActivity; // Pot activity timestamp field
     private ImageView lidOpen;     // Star icon for lid status
     private TextView  lidActivity; // Lid activity timestamp field
+
+    private TextView  statusView;  // Text view for dumping ASCII status
+                                   // This also shows error messages
 
     /* Convert URL data into a JSON Object
      *   Currently we don't actually need separate functions for reading lines
@@ -115,6 +126,36 @@ public class LugAtUcla extends Activity
         return lines;
     }
 
+    /* Read URL data as an image
+     *   This uses the HTTP library directly instead so that we can pass the
+     *   InputStream directly to the image loader instead of going through a
+     *   data buffer. */
+    private Bitmap readUrlImage(String location)
+    {
+    	Bitmap image = null;
+
+        try {
+            // Open URL
+            URL url = new URL(location);
+            HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+
+            // Read Image
+            InputStream is = conn.getInputStream();
+            image = BitmapFactory.decodeStream(is);
+
+            // Close keep-alive connections
+            conn.disconnect();
+        }
+        catch (MalformedURLException e) {
+            Log.d("LugAtUcla", "Invalid URL: " + location);
+        }
+        catch (IOException e) {
+            Log.d("LugAtUcla", "Download failed for: " + location);
+        }
+
+        return image;
+    }
+
     /* Display the coffee status to the user */
     private void setStatus(CoffeeStatus status)
     {
@@ -140,14 +181,11 @@ public class LugAtUcla extends Activity
         statusView.setText(status.toString());
     }
 
-    /* Trigger a refresh of the coffee pot status */
-    private void loadStatus()
+    /* Trigger a refresh of the webcam status */
+    private void loadWebcamStatus()
     {
-        // Lookup URL in the user preferences, COFFEE_JSON is the default URL
-        String location = this.settings.getString("coffee_json", this.COFFEE_JSON);
-
-        // Notify the user that we're loading
-        statusView.setText("Loading..");
+        // Lookup URL in the user preferences, LASTSNAP_JPG is the default URL
+        String location = this.settings.getString("lastsnap_jpg", this.LASTSNAP_JPG);
 
         // Update status in a background thread
         // 
@@ -161,17 +199,51 @@ public class LugAtUcla extends Activity
         // finished.
         //
         // The first Java Generic parameter are:
-        //   1. String       - argument for doInBackground, from .execute()
-        //   2. Void         - not used here, normally used for progress bars
-        //   3. CoffeeStatus - the return type from doInBackground which is
-        //                     passed to onPostExecute function.
-        new AsyncTask<String, Void, CoffeeStatus>() {
+        //   1. String - argument for doInBackground, from .execute()
+        //   2. Void   - not used here, normally used for progress bars
+        //   3. Bitmap - the return type from doInBackground which is
+        //               passed to onPostExecute function.
+        new AsyncTask<String, Void, Bitmap>() {
 
             // Called from a background thread, so we don't block the user
             // interface. Using AsyncTask synchronization is handled for us.
-            protected CoffeeStatus doInBackground(String... args) {
+            protected Bitmap doInBackground(String... args) {
                 // Java passes this as a variable argument array, but we only
                 // use the first entry.
+                String location = args[0];
+                Bitmap image    = LugAtUcla.this.readUrlImage(location);
+                return image;
+            }
+
+            // Called once in the main thread once doInBackground finishes.
+            // This is executed in the Main thread once again so that we can
+            // update the user interface.
+            protected void onPostExecute(Bitmap image) {
+                LugAtUcla.this.lastsnap.setImageBitmap(image);
+            }
+
+        }.execute(location);
+    }
+
+    /* Trigger a refresh of the coffee pot status */
+    private void loadCoffeeStatus()
+    {
+        // Lookup URL in the user preferences, COFFEE_JSON is the default URL
+        String location = this.settings.getString("coffee_json", this.COFFEE_JSON);
+
+        // Notify the user that we're loading
+        statusView.setText("Loading..");
+
+        // Update status in a background thread
+        // 
+        // See loadWebcamStatus for details
+        //
+	// We pass a parse the JSON text into a CoffeeStatus in the background
+	// as a convenience to localize the JSON objects as much as possible.
+        new AsyncTask<String, Void, CoffeeStatus>() {
+
+            // Called from a background thread.
+            protected CoffeeStatus doInBackground(String... args) {
                 String       location = args[0];
                 JSONObject   json     = LugAtUcla.this.readUrlObject(location);
                 CoffeeStatus status   = new CoffeeStatus(json);
@@ -179,8 +251,6 @@ public class LugAtUcla extends Activity
             }
 
             // Called once in the main thread once doInBackground finishes.
-            // This is executed in the Main thread once again so that we can
-            // update the user interface.
             protected void onPostExecute(CoffeeStatus status) {
                 LugAtUcla.this.setStatus(status);
                 Toast.makeText(LugAtUcla.this, "Load complete", Toast.LENGTH_SHORT).show();
@@ -198,7 +268,8 @@ public class LugAtUcla extends Activity
      *             have the correct argument types. */
     public void onRefresh(View btn)
     {
-        this.loadStatus();
+        this.loadCoffeeStatus();
+        this.loadWebcamStatus();
     }
 
     /* Initialize the App menu
@@ -221,7 +292,8 @@ public class LugAtUcla extends Activity
 
             // reload the coffee pot status
             case R.id.refresh:
-                this.loadStatus();
+                this.loadCoffeeStatus();
+                this.loadWebcamStatus();
                 return true;
 
             // open the user settings list
@@ -262,13 +334,33 @@ public class LugAtUcla extends Activity
         this.settings    = PreferenceManager.getDefaultSharedPreferences(this);
 
         // Lookup all our user interface widgets
-        this.statusView  =  (TextView)findViewById(R.id.status);
+        this.lastsnap    = (ImageView)findViewById(R.id.lastsnap);
         this.potIn       = (ImageView)findViewById(R.id.pot_in);
         this.potActivity =  (TextView)findViewById(R.id.pot_activity);
         this.lidOpen     = (ImageView)findViewById(R.id.lid_open);
         this.lidActivity =  (TextView)findViewById(R.id.lid_activity);
+        this.statusView  =  (TextView)findViewById(R.id.status);
+
+        // Create the timer function
+	//   Once started, the run() method will be called at a fixed rate from
+	//   the background. Note that we cannot can't update the UI from the
+	//   background. Luckily, we load the status with AsyncTask which
+	//   handles updating the display automatically.
+        //
+	//   We use a standard Java timer here but there are Android specific
+	//   timers that could be used.
+	TimerTask task = new TimerTask() {
+		public void run() {
+			LugAtUcla.this.loadWebcamStatus();
+		}
+	};
+
+	// Schedule webcam refresh every 5 seconds
+	this.timer = new Timer();
+	this.timer.scheduleAtFixedRate(task, 1000*5, 1000*5);
 
         // Trigger the initial status update
-        this.loadStatus();
+	this.loadCoffeeStatus();
+	this.loadWebcamStatus();
     }
 }
