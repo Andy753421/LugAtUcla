@@ -20,17 +20,27 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.text.DateFormat;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSession;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -132,7 +142,7 @@ public class LugAtUcla extends Activity
      *   data buffer. */
     private Bitmap readUrlImage(String location)
     {
-    	Bitmap image = null;
+        Bitmap image = null;
 
         try {
             // Open URL
@@ -156,6 +166,77 @@ public class LugAtUcla extends Activity
         return image;
     }
 
+    /* Post data to a URL
+     *   Todo - description */
+    //final static HostnameVerifier DO_NOT_VERIFY = new HostnameVerifier() {
+    //    public boolean verify(String hostname, SSLSession session) {
+    //        return true;
+    //    }
+    //};
+    private List<String> postUrlData(String location, Map<String,String> params)
+    {
+        // Log in to WiFi
+        LinkedList<String> lines = new LinkedList<String>();
+        try {
+            URL url = new URL(location);
+            HttpURLConnection conn  = (HttpURLConnection)url.openConnection();
+
+            // Ignore insecure connections
+            //HttpsURLConnection sconn = (HttpsURLConnection)conn;
+            //sconn.setHostnameVerifier(DO_NOT_VERIFY);
+
+            // Setup connection
+            conn.setDoInput(true);
+            conn.setDoOutput(true);
+            conn.setReadTimeout(2000);
+            conn.setConnectTimeout(3000);
+            conn.setRequestMethod("POST");
+
+            // Open buffered writer
+            OutputStream       os  = conn.getOutputStream();
+            OutputStreamWriter osw = new OutputStreamWriter(os, "UTF-8");
+            BufferedWriter     bw  = new BufferedWriter(osw);
+
+            // Write URL data
+            Log.d("LugAtUcla", "Connect: " + location);
+            for (String key : params.keySet()) {
+                String val  = params.get(key);
+                String ukey = URLEncoder.encode(key, "UTF-8");
+                String uval = URLEncoder.encode(val, "UTF-8");
+                bw.write(ukey + "=" + uval + "&");
+                Log.d("LugAtUcla", "    " + ukey + " = " + uval);
+            }
+
+            // Flush output
+            bw.flush();
+            bw.close();
+            os.close();
+
+            // Start connection
+            conn.connect();
+
+            // Open buffered reader
+            InputStream       is  = conn.getInputStream();
+            InputStreamReader isr = new InputStreamReader(is);
+            BufferedReader    br  = new BufferedReader(isr);
+
+            // Read data into lines array
+            String line;
+            while ((line = br.readLine()) != null)
+                lines.add(line);
+
+            // Close keep-alive connections
+            conn.disconnect();
+        }
+        catch (MalformedURLException e) {
+            Log.d("LugAtUcla", "Invalid URL: " + location);
+        }
+        catch (IOException e) {
+            Log.d("LugAtUcla", "Connect failed for: " + location);
+        }
+        return lines;
+    }
+
     /* Display the coffee status to the user */
     private void setStatus(CoffeeStatus status)
     {
@@ -163,7 +244,7 @@ public class LugAtUcla extends Activity
         int        yes = android.R.drawable.star_on;
         int        no  = android.R.drawable.star_off;
 
-        // Update graphical display 
+        // Update graphical display
         //   this provides a nice, readable representation of the coffee
         //   status, but it does not support showing error messages so we only
         //   update it if there have been no errors.
@@ -188,7 +269,7 @@ public class LugAtUcla extends Activity
         String location = this.settings.getString("lastsnap_jpg", this.LASTSNAP_JPG);
 
         // Update status in a background thread
-        // 
+        //
         // In Android, we normally cannot access the network from the main
         // thread; doing so would cause the user interface to freeze during
         // data transfer.
@@ -235,11 +316,11 @@ public class LugAtUcla extends Activity
         statusView.setText("Loading..");
 
         // Update status in a background thread
-        // 
+        //
         // See loadWebcamStatus for details
         //
-	// We pass a parse the JSON text into a CoffeeStatus in the background
-	// as a convenience to localize the JSON objects as much as possible.
+        // We pass a parse the JSON text into a CoffeeStatus in the background
+        // as a convenience to localize the JSON objects as much as possible.
         new AsyncTask<String, Void, CoffeeStatus>() {
 
             // Called from a background thread.
@@ -262,25 +343,57 @@ public class LugAtUcla extends Activity
     /* Log Into WiFi */
     public void wifiLogin(String ssid)
     {
-    	String lower = ssid.toLowerCase();
-    	String upper = ssid.toUpperCase();
-    	String quote = "\""+upper+"\"";
+        String lower = ssid.toLowerCase();
+        String upper = ssid.toUpperCase();
+        String quote = "\""+upper+"\"";
 
         // Lookup login info in the user preferences, no default
-        String user = this.settings.getString(lower+"_user", "");
-        String pass = this.settings.getString(lower+"_pass", "");
+        final String user = this.settings.getString(lower+"_user", "");
+        final String pass = this.settings.getString(lower+"_pass", "");
 
         // Make sure it's valid
         if ((user == null || user.length() == 0) ||
             (pass == null || pass.length() == 0)) {
                 Toast.makeText(this, "No Login Info for "+quote+" WiFi",
-                		Toast.LENGTH_SHORT).show();
+                        Toast.LENGTH_SHORT).show();
                 return;
-	}
+            }
 
-	// Log into wifi
-	Toast.makeText(this, "Logging into "+quote+" WiFi",
-			Toast.LENGTH_SHORT).show();
+        // Format the input
+        String location = "https://wireless.cs.ucla.edu/login.html";
+        Map<String,String> params = new HashMap<String,String>() {{
+            put("buttonClicked", "4");
+            put("err_flag",      "0");
+            put("err_msg",       "");
+            put("info_flag",     "0");
+            put("info_msg",      "");
+            put("redirect_url",  "http://google.com");
+            put("username",      user);
+            put("password",      pass);
+        }};
+
+        // Tell the user we're starting
+        Toast.makeText(this, "Logging into "+quote+" WiFi",
+                Toast.LENGTH_SHORT).show();
+
+        // Log in in the background
+        new AsyncTask<Object, Void, List<String>>() {
+
+            // Called from a background thread.
+            @SuppressWarnings("unchecked")
+            protected List<String> doInBackground(Object... args) {
+                String             location = (String)args[0];
+                Map<String,String> params   = (Map<String,String>)args[1];
+                List<String>       lines    = LugAtUcla.this.postUrlData(location, params);
+                return lines;
+            }
+
+            // Called once in the main thread once doInBackground finishes.
+            protected void onPostExecute(List<String> lines) {
+                Toast.makeText(LugAtUcla.this, "Load complete", Toast.LENGTH_SHORT).show();
+            }
+
+        }.execute(location, params);
     }
 
     /* Callbacks - there are multiple ways to specify callback but one of the
@@ -375,25 +488,25 @@ public class LugAtUcla extends Activity
         this.statusView  =  (TextView)findViewById(R.id.status);
 
         // Create the timer function
-	//   Once started, the run() method will be called at a fixed rate from
-	//   the background. Note that we cannot can't update the UI from the
-	//   background. Luckily, we load the status with AsyncTask which
-	//   handles updating the display automatically.
+        //   Once started, the run() method will be called at a fixed rate from
+        //   the background. Note that we cannot can't update the UI from the
+        //   background. Luckily, we load the status with AsyncTask which
+        //   handles updating the display automatically.
         //
-	//   We use a standard Java timer here but there are Android specific
-	//   timers that could be used.
-	TimerTask task = new TimerTask() {
-		public void run() {
-			LugAtUcla.this.loadWebcamStatus();
-		}
-	};
+        //   We use a standard Java timer here but there are Android specific
+        //   timers that could be used.
+        TimerTask task = new TimerTask() {
+            public void run() {
+                LugAtUcla.this.loadWebcamStatus();
+            }
+        };
 
-	// Schedule webcam refresh every 5 seconds
-	this.timer = new Timer();
-	this.timer.scheduleAtFixedRate(task, 1000*5, 1000*5);
+        // Schedule webcam refresh every 5 seconds
+        this.timer = new Timer();
+        this.timer.scheduleAtFixedRate(task, 1000*5, 1000*5);
 
         // Trigger the initial status update
-	this.loadCoffeeStatus();
-	this.loadWebcamStatus();
+        this.loadCoffeeStatus();
+        this.loadWebcamStatus();
     }
 }
