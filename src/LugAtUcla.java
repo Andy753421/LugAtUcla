@@ -65,6 +65,7 @@ public class LugAtUcla extends Activity
     private SharedPreferences settings;
 
     /* Auto refresh */
+    private TimerTask task;        // Java auto-refresh task
     private Timer     timer;       // Java auto-refresh timer
 
     /* Activity Widgets */
@@ -267,6 +268,7 @@ public class LugAtUcla extends Activity
     {
         // Lookup URL in the user preferences, LASTSNAP_JPG is the default URL
         String location = this.settings.getString("lastsnap_jpg", this.LASTSNAP_JPG);
+        Log.d("LugAtUcla", "loadWebcamStatus - " + location);
 
         // Update status in a background thread
         //
@@ -315,6 +317,9 @@ public class LugAtUcla extends Activity
         // Notify the user that we're loading
         statusView.setText("Loading..");
 
+        // Log the load
+        Log.d("LugAtUcla", "loadCoffeeStatus - " + location);
+
         // Update status in a background thread
         //
         // See loadWebcamStatus for details
@@ -333,6 +338,7 @@ public class LugAtUcla extends Activity
 
             // Called once in the main thread once doInBackground finishes.
             protected void onPostExecute(CoffeeStatus status) {
+                Log.d("LugAtUcla", "CoffeeStatus:\n" + status);
                 LugAtUcla.this.setStatus(status);
                 Toast.makeText(LugAtUcla.this, "Load complete", Toast.LENGTH_SHORT).show();
             }
@@ -341,7 +347,7 @@ public class LugAtUcla extends Activity
     }
 
     /* Log Into WiFi */
-    public void wifiLogin(String ssid)
+    private void wifiLogin(String ssid)
     {
         String lower = ssid.toLowerCase();
         String upper = ssid.toUpperCase();
@@ -416,6 +422,7 @@ public class LugAtUcla extends Activity
     /* Initialize the App menu
      *   we define the menu in res/menu/menu.xml so all we have to do is load
      *   it using MenuInflater. */
+    @Override
     public boolean onCreateOptionsMenu(Menu menu)
     {
         MenuInflater inflater = getMenuInflater();
@@ -427,6 +434,7 @@ public class LugAtUcla extends Activity
      *   since we named all our menu entries in the XML file we can just switch
      *   on the menu item ID in order to determine which entry was selected by
      *   the user */
+    @Override
     public boolean onOptionsItemSelected(MenuItem item)
     {
         switch (item.getItemId()) {
@@ -463,9 +471,17 @@ public class LugAtUcla extends Activity
     }
 
     /* Initialize our app
-     *   The "lifecycle" of an Android App is much more complex than this, but
-     *   luckily we can do everything in onCreate because we don't have to save
-     *   state when the user starts and stops the App. */
+     *   The "lifecycle" of an Android App is rather complex. In our case we
+     *   only have to deal with three methods, onCreate, onStart, and onStop.
+     *   When the App is first started after boot onCreate and onStart are both
+     *   called. When the App is closed onStop is called and the App will no
+     *   longer be visible. However, the Activity is kept memory so that only
+     *   onStart needs to be called the next time the App is launched.
+     *
+     *   The Activity is "Create" the first time it is launched after booting
+     *   the phone. It should initialize any persistent data such as widgets,
+     *   settings, layouts, etc. */
+    @Override
     public void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
@@ -486,6 +502,15 @@ public class LugAtUcla extends Activity
         this.lidOpen     = (ImageView)findViewById(R.id.lid_open);
         this.lidActivity =  (TextView)findViewById(R.id.lid_activity);
         this.statusView  =  (TextView)findViewById(R.id.status);
+    }
+
+    /* The Activity is "Started" it is brought into the foreground, at this point we
+     * need to refresh the Coffee and WebCam statuses and start a timer so that
+     * the WebCam image will be auto refreshed while the app is visible. */
+    @Override
+    public void onStart()
+    {
+        super.onStart();
 
         // Create the timer function
         //   Once started, the run() method will be called at a fixed rate from
@@ -495,7 +520,7 @@ public class LugAtUcla extends Activity
         //
         //   We use a standard Java timer here but there are Android specific
         //   timers that could be used.
-        TimerTask task = new TimerTask() {
+        this.task  = new TimerTask() {
             public void run() {
                 LugAtUcla.this.loadWebcamStatus();
             }
@@ -503,10 +528,30 @@ public class LugAtUcla extends Activity
 
         // Schedule webcam refresh every 5 seconds
         this.timer = new Timer();
-        this.timer.scheduleAtFixedRate(task, 1000*5, 1000*5);
+        this.timer.scheduleAtFixedRate(this.task, 1000*5, 1000*5);
 
         // Trigger the initial status update
         this.loadCoffeeStatus();
         this.loadWebcamStatus();
+    }
+
+    /* The Activity is "Stopped" when it is no longer visible, for example when
+     * the "Home" key is pressed or when another activity, such as the Settings
+     * Activity, is launched. We need to stop the timer here so that we're not
+     * wasting bandwidth when the App is not visible. */
+    @Override
+    public void onStop()
+    {
+        super.onStop();
+
+        // Cancel auto-update when the app is not visible
+        this.timer.cancel();
+
+        // Clear references to the timer and timer task
+        //   This allows their memory to be garbage collected while the App is
+        //   in the background. Unfortuantly, we can't seem to re-use the
+        //   existing timer so we have to recreate it each time in onCreate.
+        this.timer = null;
+        this.task  = null;
     }
 }

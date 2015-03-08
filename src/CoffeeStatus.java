@@ -56,7 +56,6 @@ public class CoffeeStatus
         catch (ParseException e) {
             this.error = "Error parsing dates" + e.toString();
         }
-        Log.d("LugAtUcla", "CoffeeStatus: " + this.toString());
     }
 
     // Convenience function to format coffee pot status as a string.
