@@ -67,6 +67,7 @@ public class LugAtUcla extends Activity
     /* Auto refresh */
     private TimerTask task;        // Java auto-refresh task
     private Timer     timer;       // Java auto-refresh timer
+    private boolean   async;       // Async task is loading
 
     /* Activity Widgets */
     private ImageView lastsnap;    // Last webcam snapshot
@@ -113,6 +114,8 @@ public class LugAtUcla extends Activity
             // Open URL
             URL url = new URL(location);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+            conn.setReadTimeout(2000);
+            conn.setConnectTimeout(2000);
 
             // Open buffered reader
             InputStream       is  = conn.getInputStream();
@@ -149,6 +152,8 @@ public class LugAtUcla extends Activity
             // Open URL
             URL url = new URL(location);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+            conn.setReadTimeout(2000);
+            conn.setConnectTimeout(2000);
 
             // Read Image
             InputStream is = conn.getInputStream();
@@ -174,11 +179,12 @@ public class LugAtUcla extends Activity
     //        return true;
     //    }
     //};
-    private List<String> postUrlData(String location, Map<String,String> params)
+    private List<String> postUrlData(String location, String[][] params)
     {
         // Log in to WiFi
         LinkedList<String> lines = new LinkedList<String>();
         try {
+            Log.d("LugAtUcla", "postUrlData - " + location);
             URL url = new URL(location);
             HttpURLConnection conn  = (HttpURLConnection)url.openConnection();
 
@@ -190,7 +196,7 @@ public class LugAtUcla extends Activity
             conn.setDoInput(true);
             conn.setDoOutput(true);
             conn.setReadTimeout(2000);
-            conn.setConnectTimeout(3000);
+            conn.setConnectTimeout(2000);
             conn.setRequestMethod("POST");
 
             // Open buffered writer
@@ -199,13 +205,14 @@ public class LugAtUcla extends Activity
             BufferedWriter     bw  = new BufferedWriter(osw);
 
             // Write URL data
-            Log.d("LugAtUcla", "Connect: " + location);
-            for (String key : params.keySet()) {
-                String val  = params.get(key);
-                String ukey = URLEncoder.encode(key, "UTF-8");
-                String uval = URLEncoder.encode(val, "UTF-8");
-                bw.write(ukey + "=" + uval + "&");
-                Log.d("LugAtUcla", "    " + ukey + " = " + uval);
+            Log.d("LugAtUcla", "postUrlData - writing data");
+            for (int i = 0; i < params.length; i++) {
+                String key = URLEncoder.encode(params[i][0], "UTF-8");
+                String val = URLEncoder.encode(params[i][1], "UTF-8");
+                String sep = (i+1)<params.length ? "&" : "";
+                String str = key + "=" + val + sep;
+                Log.d("LugAtUcla", "    " + str);
+                bw.write(str);
             }
 
             // Flush output
@@ -222,6 +229,7 @@ public class LugAtUcla extends Activity
             BufferedReader    br  = new BufferedReader(isr);
 
             // Read data into lines array
+            Log.d("LugAtUcla", "postUrlData - reading data");
             String line;
             while ((line = br.readLine()) != null)
                 lines.add(line);
@@ -230,10 +238,10 @@ public class LugAtUcla extends Activity
             conn.disconnect();
         }
         catch (MalformedURLException e) {
-            Log.d("LugAtUcla", "Invalid URL: " + location);
+            Log.d("LugAtUcla", "Invalid URL: " + location + "\n" + e);
         }
         catch (IOException e) {
-            Log.d("LugAtUcla", "Connect failed for: " + location);
+            Log.d("LugAtUcla", "IOException: " + location + "\n" + e);
         }
         return lines;
     }
@@ -270,6 +278,11 @@ public class LugAtUcla extends Activity
         String location = this.settings.getString("lastsnap_jpg", this.LASTSNAP_JPG);
         Log.d("LugAtUcla", "loadWebcamStatus - " + location);
 
+        // Check if a task is already running
+        if (this.async)
+            return;
+        this.async = true;
+
         // Update status in a background thread
         //
         // In Android, we normally cannot access the network from the main
@@ -303,6 +316,7 @@ public class LugAtUcla extends Activity
             // update the user interface.
             protected void onPostExecute(Bitmap image) {
                 LugAtUcla.this.lastsnap.setImageBitmap(image);
+                LugAtUcla.this.async = false;
             }
 
         }.execute(location);
@@ -360,23 +374,23 @@ public class LugAtUcla extends Activity
         // Make sure it's valid
         if ((user == null || user.length() == 0) ||
             (pass == null || pass.length() == 0)) {
-                Toast.makeText(this, "No Login Info for "+quote+" WiFi",
-                        Toast.LENGTH_SHORT).show();
-                return;
-            }
+            Toast.makeText(this, "No Login Info for "+quote+" WiFi",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         // Format the input
         String location = "https://wireless.cs.ucla.edu/login.html";
-        Map<String,String> params = new HashMap<String,String>() {{
-            put("buttonClicked", "4");
-            put("err_flag",      "0");
-            put("err_msg",       "");
-            put("info_flag",     "0");
-            put("info_msg",      "");
-            put("redirect_url",  "http://google.com");
-            put("username",      user);
-            put("password",      pass);
-        }};
+        String[][] params = new String[][]{
+            {"buttonClicked", "4"},
+            {"err_flag",      "0"},
+            {"err_msg",       ""},
+            {"info_flag",     "0"},
+            {"info_msg",      ""},
+            {"redirect_url",  "http://google.com"},
+            {"username",      user},
+            {"password",      pass},
+        };
 
         // Tell the user we're starting
         Toast.makeText(this, "Logging into "+quote+" WiFi",
@@ -388,9 +402,9 @@ public class LugAtUcla extends Activity
             // Called from a background thread.
             @SuppressWarnings("unchecked")
             protected List<String> doInBackground(Object... args) {
-                String             location = (String)args[0];
-                Map<String,String> params   = (Map<String,String>)args[1];
-                List<String>       lines    = LugAtUcla.this.postUrlData(location, params);
+                String       location = (String)args[0];
+                String[][]   params   = (String[][])args[1];
+                List<String> lines    = LugAtUcla.this.postUrlData(location, params);
                 return lines;
             }
 
